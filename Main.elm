@@ -39,9 +39,9 @@ type alias StationStatus name = { station_id : name
                            -- , last_reported : String -- Time
                            -- , eightd_has_available_keys : Boolean
                            }
-type alias State =
-    Result Http.Error
-           (List (StationStatus ID))
+type State = Loading
+           | Fail Http.Error
+           | Stations (List (StationStatus ID))
 
 mk_station_status : name -> Int -> Int -> StationStatus name
 mk_station_status id bikes docks =
@@ -64,14 +64,17 @@ fetch = Task.perform  Err Ok <|
         Http.get model_decoder "https://gbfs.thehubway.com/gbfs/en/station_status.json"
     
 init : (State, Cmd Msg)
-init = (Ok [], fetch)
+init = (Loading, fetch)
 
 -- UPDATE
 
-type alias Msg = State
+type alias Msg = Result Http.Error (List (StationStatus ID))
 
 update : Msg -> State -> (State, Cmd Msg)
-update new_info old_info = (new_info, Cmd.none)
+update new_info st =
+    case new_info of
+        Err e -> (Fail e, Cmd.none)
+        Ok ss -> (Stations ss, Cmd.none)
 
 -- VIEW
 
@@ -103,8 +106,9 @@ view model =
   Html.div []
     [
      case model of
-         Err err -> Html.text (toString err)
-         Ok stations ->
+         Loading  -> Html.text "Fetching Data..."
+         Fail err -> Html.text (toString err)
+         Stations stations ->
          let relevant_stations = filter_stations stations
              rows = List.map (Html.tr [] << view_station) relevant_stations
          in Html.table [] [header , Html.tbody [] rows]
